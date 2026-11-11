@@ -1,0 +1,56 @@
+export const categories = [
+  'Ferretería',
+  'Cemento',
+  'Materiales de construcción',
+  'Arena y grava',
+  'Acero y metales',
+  'Madera',
+  'Alimentos',
+  'Productos agrícolas',
+  'Muebles y electrodomésticos',
+  'Maquinaria',
+  'Textiles',
+  'Paquetería',
+  'Otros',
+];
+export const vehicleTypes: Record<string, string> = {
+  PICKUP: 'Camioneta',
+  VAN: 'Furgoneta',
+  SMALL_TRUCK: 'Camión pequeño / turbo',
+  MEDIUM_TRUCK: 'Camión sencillo',
+  HEAVY_TRUCK: 'Doble troque',
+  TRACTOR_TRUCK: 'Tractocamión',
+  OTHER: 'Otro',
+};
+export const bodyTypes: Record<string, string> = {
+  STAKE: 'Estacas',
+  BOX: 'Furgón',
+  REFRIGERATED: 'Refrigerado',
+  TANK: 'Cisterna',
+  PLATFORM: 'Plataforma',
+  DUMP: 'Volqueta',
+  OTHER: 'Otra',
+};
+export const units: Record<string, string> = {
+  KG: 'Kilogramos',
+  LB: 'Libras',
+  TON: 'Toneladas',
+  BOX: 'Cajas',
+  SACK: 'Bultos',
+  PALLET: 'Estibas',
+  UNIT: 'Unidades',
+};
+export const statuses: Record<string, string> = {
+  OPEN: 'Abierta',
+  ASSIGNED: 'Asignada',
+  PENDING: 'Pendiente',
+  ACCEPTED: 'Aceptada',
+  REJECTED: 'Rechazada',
+  WITHDRAWN: 'Retirada',
+  PENDING_PICKUP: 'Pendiente de recogida',
+  AT_PICKUP: 'En recogida',
+  IN_TRANSIT: 'En tránsito',
+  DELIVERED: 'Entregada',
+  COMPLETED: 'Completada',
+  CANCELLED: 'Cancelada',
+};

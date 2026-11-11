@@ -1,0 +1,35 @@
+{
+  "name": "revelo-transporte-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Marketplace de transporte de cargas terrestres en Colombia.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write .",
+    "db:migrate": "npm run prisma:migrate --workspace apps/api",
+    "db:deploy": "npm exec --workspace apps/api -- prisma migrate deploy",
+    "db:seed": "npm run prisma:seed --workspace apps/api",
+    "db:reset-local": "npm run prisma:reset-local --workspace apps/api",
+    "db:sync": "npm exec --workspace apps/api -- prisma db push",
+    "test:api:e2e": "node apps/api/test/marketplace.e2e.cjs",
+    "test:maps": "npm run build --workspace apps/api && node --import tsx --test tests/maps.test.ts",
+    "test:tracking": "node --import tsx --test tests/tracking.test.ts"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@gsap/react": "^2.1.2",
+    "gsap": "^3.15.0"
+  }
+}

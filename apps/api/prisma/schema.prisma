@@ -1,0 +1,481 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  TRANSPORTER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum VerificationDocumentType {
+  ID_CARD
+  CRIMINAL_RECORD
+}
+
+enum VehicleVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VehicleChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VehicleType {
+  PICKUP
+  VAN
+  SMALL_TRUCK
+  MEDIUM_TRUCK
+  HEAVY_TRUCK
+  TRACTOR_TRUCK
+  OTHER
+}
+
+enum BodyType {
+  STAKE
+  BOX
+  REFRIGERATED
+  TANK
+  PLATFORM
+  DUMP
+  OTHER
+}
+
+enum CargoStatus {
+  DRAFT
+  OPEN
+  ASSIGNED
+  CANCELLED
+  COMPLETED
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum TripStatus {
+  PENDING_PICKUP
+  AT_PICKUP
+  IN_TRANSIT
+  DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
+enum IncidentStatus {
+  OPEN
+  IN_REVIEW
+  WAITING_INFO
+  RESOLVED
+  CLOSED
+}
+
+model User {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  email                  String                 @unique
+  passwordHash           String
+  role                   UserRole
+  status                 AccountStatus          @default(ACTIVE)
+  lastLoginAt            DateTime?
+  resetPasswordToken     String?
+  resetPasswordExpires   DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  profile                UserProfile?
+  companyProfile         CompanyProfile?
+  transporterProfile     TransporterProfile?
+  verificationDocuments  VerificationDocument[]
+  vehicles               Vehicle[]
+  cargos                 Cargo[]                @relation("ClientCargos")
+  proposals              Proposal[]             @relation("TransporterProposals")
+  clientTrips            Trip[]                 @relation("ClientTrips")
+  transporterTrips       Trip[]                 @relation("TransporterTrips")
+  notifications          Notification[]
+  tripStatusUpdates      TripStatusHistory[]
+  auditLogs              AuditLog[]
+  sentTripMessages       TripMessage[]          @relation("TripMessageSender")
+  sentProposalMessages   ProposalMessage[]      @relation("ProposalMessageSender")
+  proposalPriceOffers    ProposalPriceOffer[]   @relation("ProposalPriceOfferSender")
+  reportedIncidents      TripIncident[]         @relation("IncidentReporter")
+  incidentChanges        IncidentHistory[]      @relation("IncidentHistoryActor")
+  authoredReviews        TripReview[]           @relation("ReviewAuthor")
+  receivedReviews        TripReview[]           @relation("ReviewRecipient")
+  vehicleChangeRequests  VehicleChangeRequest[] @relation("VehicleChangeRequester")
+  reviewedVehicleChanges VehicleChangeRequest[] @relation("VehicleChangeReviewer")
+
+  @@index([role])
+  @@index([status])
+}
+
+model VerificationDocument {
+  id        String                   @id @default(uuid()) @db.Uuid
+  userId    String                   @db.Uuid
+  type      VerificationDocumentType
+  fileName  String
+  mimeType  String
+  dataUrl   String                   @db.Text
+  createdAt DateTime                 @default(now())
+  user      User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
+}
+
+model UserProfile {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @unique @db.Uuid
+  firstName      String
+  lastName       String
+  phone          String?
+  documentType   String?
+  documentNumber String?
+  city           String?
+  department     String?
+  photoData      String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CompanyProfile {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @db.Uuid
+  businessName String
+  taxId        String?
+  contactName  String?
+  contactPhone String?
+  address      String?
+  city         String?
+  department   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TransporterProfile {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @unique @db.Uuid
+  displayName    String
+  baseCity       String?
+  baseDepartment String?
+  availability   String?
+  bio            String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Vehicle {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  ownerId               String                    @db.Uuid
+  plate                 String                    @unique
+  brand                 String
+  model                 String
+  year                  Int
+  vehicleType           VehicleType
+  bodyType              BodyType
+  maxWeightKg           Decimal                   @db.Decimal(12, 2)
+  volumeM3              Decimal?                  @db.Decimal(10, 2)
+  latitude              Float?
+  longitude             Float?
+  locationUpdatedAt     DateTime?
+  operatingCity         String
+  description           String?
+  photos                String[]
+  ownershipDocumentData String?                   @db.Text
+  ownershipDocumentName String?
+  verificationStatus    VehicleVerificationStatus @default(PENDING)
+  isAvailable           Boolean                   @default(true)
+  isActive              Boolean                   @default(true)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  owner                 User                      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  proposals             Proposal[]
+  trips                 Trip[]
+  changeRequests        VehicleChangeRequest[]
+
+  @@index([ownerId])
+  @@index([vehicleType, bodyType])
+  @@index([isAvailable, isActive])
+}
+
+model VehicleChangeRequest {
+  id          String              @id @default(uuid()) @db.Uuid
+  vehicleId   String              @db.Uuid
+  requesterId String              @db.Uuid
+  reviewerId  String?             @db.Uuid
+  status      VehicleChangeStatus @default(PENDING)
+  changes     Json
+  reviewNote  String?
+  createdAt   DateTime            @default(now())
+  reviewedAt  DateTime?
+  vehicle     Vehicle             @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  requester   User                @relation("VehicleChangeRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  reviewer    User?               @relation("VehicleChangeReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([vehicleId, status])
+}
+
+model Cargo {
+  id                    String       @id @default(uuid()) @db.Uuid
+  clientId              String       @db.Uuid
+  title                 String
+  description           String
+  category              String
+  quantity              Decimal?     @db.Decimal(12, 2)
+  quantityUnit          String?
+  weightKg              Decimal      @db.Decimal(12, 2)
+  volumeM3              Decimal?     @db.Decimal(10, 2)
+  dimensions            String?
+  units                 Int
+  specialInstructions   String?
+  originDepartment      String
+  originCity            String
+  pickupAddress         String
+  pickupLat             Decimal      @db.Decimal(10, 7)
+  pickupLng             Decimal      @db.Decimal(10, 7)
+  destinationDepartment String
+  destinationCity       String
+  deliveryAddress       String
+  deliveryLat           Decimal      @db.Decimal(10, 7)
+  deliveryLng           Decimal      @db.Decimal(10, 7)
+  pickupWindowStart     DateTime
+  deliveryDeadline      DateTime
+  requiredVehicleType   VehicleType
+  requiredBodyType      BodyType?
+  requiredCapacityKg    Decimal      @db.Decimal(12, 2)
+  estimatedBudgetCop    Decimal      @db.Decimal(14, 2)
+  negotiable            Boolean      @default(true)
+  observations          String?
+  status                CargoStatus  @default(OPEN)
+  routeDistanceKm       Decimal?     @db.Decimal(10, 2)
+  routeDurationMinutes  Int?
+  routeProvider         String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  client                User         @relation("ClientCargos", fields: [clientId], references: [id], onDelete: Cascade)
+  images                CargoImage[]
+  proposals             Proposal[]
+  trip                  Trip?
+
+  @@index([clientId])
+  @@index([status])
+  @@index([originDepartment, originCity])
+  @@index([destinationDepartment, destinationCity])
+  @@index([pickupWindowStart])
+  @@index([requiredVehicleType])
+  @@index([estimatedBudgetCop])
+}
+
+model CargoImage {
+  id        String   @id @default(uuid()) @db.Uuid
+  cargoId   String   @db.Uuid
+  url       String
+  alt       String?
+  createdAt DateTime @default(now())
+  cargo     Cargo    @relation(fields: [cargoId], references: [id], onDelete: Cascade)
+
+  @@index([cargoId])
+}
+
+model Proposal {
+  id                      String               @id @default(uuid()) @db.Uuid
+  cargoId                 String               @db.Uuid
+  transporterId           String               @db.Uuid
+  vehicleId               String               @db.Uuid
+  proposedPriceCop        Decimal              @db.Decimal(14, 2)
+  availablePickupDate     DateTime
+  estimatedTransportHours Int
+  message                 String?
+  status                  ProposalStatus       @default(PENDING)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  cargo                   Cargo                @relation(fields: [cargoId], references: [id], onDelete: Cascade)
+  transporter             User                 @relation("TransporterProposals", fields: [transporterId], references: [id], onDelete: Cascade)
+  vehicle                 Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  trip                    Trip?
+  messages                ProposalMessage[]
+  priceHistory            ProposalPriceOffer[]
+
+  @@unique([cargoId, transporterId])
+  @@index([cargoId])
+  @@index([transporterId])
+  @@index([vehicleId])
+  @@index([status])
+}
+
+model ProposalMessage {
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @db.Uuid
+  senderId   String   @db.Uuid
+  body       String   @db.VarChar(2000)
+  createdAt  DateTime @default(now())
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  sender     User     @relation("ProposalMessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([proposalId, createdAt])
+}
+
+model ProposalPriceOffer {
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @db.Uuid
+  senderId   String   @db.Uuid
+  priceCop   Decimal  @db.Decimal(14, 2)
+  createdAt  DateTime @default(now())
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  sender     User     @relation("ProposalPriceOfferSender", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([proposalId, createdAt])
+}
+
+model Trip {
+  id                    String              @id @default(uuid()) @db.Uuid
+  cargoId               String              @unique @db.Uuid
+  proposalId            String              @unique @db.Uuid
+  clientId              String              @db.Uuid
+  transporterId         String              @db.Uuid
+  vehicleId             String              @db.Uuid
+  agreedPriceCop        Decimal             @db.Decimal(14, 2)
+  pickupDate            DateTime
+  estimatedDeliveryDate DateTime
+  originLabel           String
+  destinationLabel      String
+  status                TripStatus          @default(PENDING_PICKUP)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  cargo                 Cargo               @relation(fields: [cargoId], references: [id], onDelete: Restrict)
+  proposal              Proposal            @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  client                User                @relation("ClientTrips", fields: [clientId], references: [id], onDelete: Restrict)
+  transporter           User                @relation("TransporterTrips", fields: [transporterId], references: [id], onDelete: Restrict)
+  vehicle               Vehicle             @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  history               TripStatusHistory[]
+  messages              TripMessage[]
+  incidents             TripIncident[]
+  reviews               TripReview[]
+
+  @@index([clientId])
+  @@index([transporterId])
+  @@index([status])
+}
+
+model TripMessage {
+  id        String    @id @default(uuid()) @db.Uuid
+  tripId    String    @db.Uuid
+  senderId  String    @db.Uuid
+  body      String    @db.VarChar(2000)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  trip      Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  sender    User      @relation("TripMessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([tripId, createdAt])
+  @@index([senderId, readAt])
+}
+
+model TripIncident {
+  id          String            @id @default(uuid()) @db.Uuid
+  tripId      String            @db.Uuid
+  reporterId  String            @db.Uuid
+  type        String            @db.VarChar(40)
+  description String            @db.VarChar(2000)
+  status      IncidentStatus    @default(OPEN)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  trip        Trip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  reporter    User              @relation("IncidentReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  history     IncidentHistory[]
+
+  @@index([tripId, createdAt])
+  @@index([status, createdAt])
+}
+
+model IncidentHistory {
+  id         String         @id @default(uuid()) @db.Uuid
+  incidentId String         @db.Uuid
+  actorId    String         @db.Uuid
+  status     IncidentStatus
+  note       String?        @db.VarChar(1000)
+  createdAt  DateTime       @default(now())
+  incident   TripIncident   @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  actor      User           @relation("IncidentHistoryActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([incidentId, createdAt])
+}
+
+model TripReview {
+  id          String   @id @default(uuid()) @db.Uuid
+  tripId      String   @db.Uuid
+  authorId    String   @db.Uuid
+  recipientId String   @db.Uuid
+  score       Int
+  comment     String?  @db.VarChar(1000)
+  createdAt   DateTime @default(now())
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  author      User     @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  recipient   User     @relation("ReviewRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+
+  @@unique([tripId, authorId])
+  @@index([recipientId, createdAt])
+}
+
+model TripStatusHistory {
+  id          String     @id @default(uuid()) @db.Uuid
+  tripId      String     @db.Uuid
+  status      TripStatus
+  changedById String     @db.Uuid
+  note        String?
+  createdAt   DateTime   @default(now())
+  trip        Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  changedBy   User       @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([tripId])
+  @@index([changedById])
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  title     String
+  body      String
+  type      String
+  readAt    DateTime?
+  metadata  Json?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String?  @db.Uuid
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([entity, entityId])
+}
