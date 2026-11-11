@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { API_URL } from '../lib/api-base';
 import { LocateFixed, MapPin, Route, Truck } from 'lucide-react';
 import { Button } from './button';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 type Position = { lat: number; lng: number };
 type RouteResponse = {
   geometry?: GeoJSON.LineString | null;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { API_URL } from '../lib/api-base';
 
 type Point = {
   lat: number;
@@ -15,8 +16,6 @@ type RouteResponse = {
   geometry: GeoJSON.LineString | null;
   message?: string;
 };
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export function RouteMap({ origin, destination }: { origin: Point; destination: Point }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
