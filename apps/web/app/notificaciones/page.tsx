@@ -15,7 +15,7 @@ export default function NotificationsPage() {
   );
 }
 function Notifications() {
-  const { token } = useSession();
+  const { token, user } = useSession();
   const [items, setItems] = useState<Notice[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -76,31 +76,36 @@ function Notifications() {
       {!loading && !items.length && <p className="panel">No tienes notificaciones todavía.</p>}
       <div className="grid gap-3">
         {items.map((n) => (
-          <article className={`panel ${n.readAt ? '' : 'border-l-4 border-l-action'}`} key={n.id}>
+          <article
+            className={`panel ${n.type === 'PROPOSAL_COUNTEROFFER' && !n.readAt ? 'border-l-4 border-l-amber-500 bg-amber-50/70' : n.readAt ? '' : 'border-l-4 border-l-action'}`}
+            key={n.id}
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-bold">{n.title}</h2>
               <span
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${n.readAt ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-700'}`}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${n.readAt ? 'bg-slate-100 text-slate-500' : n.type === 'PROPOSAL_COUNTEROFFER' ? 'bg-amber-200 text-amber-950' : 'bg-blue-50 text-blue-700'}`}
               >
-                {n.readAt ? 'Leída' : 'Nueva'}
+                {n.readAt ? 'Leída' : n.type === 'PROPOSAL_COUNTEROFFER' ? 'Prioridad' : 'Nueva'}
               </span>
             </div>
             <p className="mt-2">{n.body}</p>
             <p className="mt-2 text-xs text-slate-500">
               {new Date(n.createdAt).toLocaleString('es-CO')}
             </p>
-            {noticeHref(n) && (
+            {noticeHref(n, user?.role) && (
               <Link
                 className="focus-ring mt-3 inline-flex min-h-10 items-center gap-1.5 rounded text-sm font-semibold text-blue-700"
-                href={noticeHref(n)!}
+                href={noticeHref(n, user?.role)!}
               >
                 Abrir{' '}
-                {n.metadata &&
-                typeof n.metadata === 'object' &&
-                !Array.isArray(n.metadata) &&
-                typeof (n.metadata as Record<string, unknown>).tripId === 'string'
-                  ? 'seguimiento del viaje'
-                  : 'carga'}{' '}
+                {n.type === 'PROPOSAL_COUNTEROFFER'
+                  ? 'panel de negociación'
+                  : n.metadata &&
+                      typeof n.metadata === 'object' &&
+                      !Array.isArray(n.metadata) &&
+                      typeof (n.metadata as Record<string, unknown>).tripId === 'string'
+                    ? 'seguimiento del viaje'
+                    : 'carga'}{' '}
                 <ExternalLink className="h-3.5 w-3.5" />
               </Link>
             )}
@@ -134,12 +139,14 @@ function Notifications() {
   );
 }
 
-function noticeHref(notice: Notice) {
+function noticeHref(notice: Notice, role?: string) {
   const metadata = notice.metadata;
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
   const fields = metadata as Record<string, unknown>;
   const tripId = typeof fields.tripId === 'string' ? fields.tripId : '';
   const cargoId = typeof fields.cargoId === 'string' ? fields.cargoId : '';
+  if (notice.type === 'PROPOSAL_COUNTEROFFER')
+    return role === 'CLIENT' ? '/dashboard#mis-cargas' : '/dashboard#mis-postulaciones';
   if (
     tripId &&
     [

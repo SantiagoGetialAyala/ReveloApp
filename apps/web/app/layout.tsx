@@ -7,6 +7,7 @@ import { NotificationIndicator } from '../components/notification-indicator';
 import { MobileNavigation } from '../components/mobile-navigation';
 import { ReveloLogo } from '../components/revelo-logo';
 import { DesktopNavigation } from '../components/desktop-navigation';
+import { AppSidebar } from '../components/app-sidebar';
 
 export const metadata: Metadata = {
   title: 'Revelo Transporte',
@@ -31,7 +32,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </nav>
           </header>
-          {children}
+          <div className="workspace-shell">
+            <AppSidebar />
+            <div className="workspace-content">{children}</div>
+          </div>
         </SessionProvider>
       </body>
     </html>

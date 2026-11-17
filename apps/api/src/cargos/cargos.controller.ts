@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -20,6 +30,9 @@ export class CargosController {
     return this.cargos.create(user.sub, dto);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('TRANSPORTER')
   @Get()
   findAll(@Query() filters: CargoFiltersDto) {
     return this.cargos.findAll(filters);
@@ -41,9 +54,12 @@ export class CargosController {
     return this.cargos.findMine(user.sub);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('CLIENT', 'TRANSPORTER')
   @Get(':id')
-  one(@Param('id') id: string) {
-    return this.cargos.findOne(id);
+  one(@Param('id') id: string, @CurrentUser() user: { sub: string; role: string }) {
+    return this.cargos.findOne(id, user.sub, user.role);
   }
 
   @ApiBearerAuth()

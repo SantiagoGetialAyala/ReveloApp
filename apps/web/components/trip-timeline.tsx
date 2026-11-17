@@ -5,9 +5,9 @@ import { getTripProgress, tripDate, tripStatusLabel } from '../lib/tracking';
 export function TripTimeline({ trip }: { trip: Trip }) {
   return (
     <section className="trip-surface p-5 sm:p-6" aria-label="Progreso de la entrega">
-      <div className="mb-6 flex items-center gap-2">
+      <div className="mb-4 flex items-center gap-2">
         <PackageCheck className="h-5 w-5 text-blue-600" />
-        <h2 className="font-bold text-slate-900">Cada etapa, a la vista</h2>
+        <h2 className="font-bold text-slate-900">Progreso del viaje</h2>
       </div>
       {trip.status === 'CANCELLED' && (
         <p className="mb-5 flex gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-800">
@@ -44,9 +44,8 @@ export function TripTimeline({ trip }: { trip: Trip }) {
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-xs leading-relaxed text-slate-500">{step.description}</p>
               {step.reached && (
-                <p className="mt-2 text-xs font-medium text-slate-600">
+                <p className="mt-1 text-[11px] font-medium text-slate-500">
                   {step.event ? (
                     <time dateTime={step.event.createdAt}>{tripDate(step.event.createdAt)}</time>
                   ) : (

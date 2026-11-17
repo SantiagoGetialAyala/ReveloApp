@@ -11,7 +11,10 @@ export function MobileNavigation() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const links = [
-    { href: '/cargas', label: user?.role === 'CLIENT' ? 'Explorar cargas' : 'Buscar cargas' },
+    {
+      href: user?.role === 'CLIENT' ? '/dashboard#mis-cargas' : '/cargas',
+      label: user?.role === 'CLIENT' ? 'Mis cargas' : 'Buscar cargas',
+    },
     ...(user?.role === 'CLIENT' ? [{ href: '/publicar-carga', label: 'Publicar una carga' }] : []),
     ...(user?.role === 'TRANSPORTER' ? [{ href: '/vehiculos', label: 'Mis vehículos' }] : []),
     ...(user?.role === 'ADMIN' ? [{ href: '/admin/incidencias', label: 'Incidencias' }] : []),

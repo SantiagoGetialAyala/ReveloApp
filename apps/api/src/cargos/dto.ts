@@ -9,9 +9,12 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsArray,
+  ArrayMaxSize,
   Max,
   Min,
   MaxLength,
+  Matches,
 } from 'class-validator';
 
 const CARGO_CATEGORIES = [
@@ -61,6 +64,13 @@ export class CreateCargoDto {
   @IsNumber() @Min(0) estimatedBudgetCop!: number;
   @IsBoolean() negotiable!: boolean;
   @IsOptional() @IsString() observations?: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(1)
+  @IsString({ each: true })
+  @MaxLength(750_000, { each: true })
+  @Matches(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/, { each: true })
+  images?: string[];
 }
 
 export class UpdateCargoDto {

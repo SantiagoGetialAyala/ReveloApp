@@ -1,88 +1,217 @@
-import {
-  ArrowDown,
-  CalendarDays,
-  MapPin,
-  Package,
-  Search,
-  SlidersHorizontal,
-  Sparkles,
-} from 'lucide-react';
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Package, Search, SlidersHorizontal } from 'lucide-react';
+import { Access, useSession } from '../../components/session';
 import { CargoCard, CargoCardData } from '../../components/cargo-card';
+import { CargoBoardMap } from '../../components/cargo-board-map';
+import { CompatibleCargos } from '../../components/compatible-cargos';
 import { Button } from '../../components/button';
 import { bodyTypes, categories, vehicleTypes } from '../../lib/catalogs';
 import { apiFetch } from '../../lib/api';
-import { CompatibleCargos } from '../../components/compatible-cargos';
-import { PublishCargoAction } from '../../components/publish-cargo-action';
+import type { Cargo } from '../../lib/models';
 
-type CargosResponse = { items: CargoCardData[]; total: number; page: number; limit: number };
-type SearchParams = Record<string, string | string[] | undefined>;
-const getSingle = (params: SearchParams, key: string) =>
-  typeof params[key] === 'string' ? (params[key] as string) : '';
+type SearchResult = { items: CargoCardData[]; total: number; page: number; limit: number };
+const filterNames = [
+  'originDepartment',
+  'originCity',
+  'destinationDepartment',
+  'destinationCity',
+  'category',
+  'vehicleType',
+  'bodyType',
+  'maxBudgetCop',
+  'minWeightKg',
+  'maxWeightKg',
+  'pickupAfter',
+  'pickupBefore',
+  'sort',
+] as const;
 
-export default async function CargasPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>;
-}) {
-  const params = await searchParams;
-  const fields = [
-    'originDepartment',
-    'originCity',
-    'destinationDepartment',
-    'destinationCity',
-    'category',
-    'vehicleType',
-    'bodyType',
-    'maxBudgetCop',
-    'minWeightKg',
-    'maxWeightKg',
-    'pickupAfter',
-    'pickupBefore',
-    'sort',
-  ] as const;
-  const query = new URLSearchParams();
-  for (const key of fields) {
-    const value = getSingle(params, key).trim();
-    if (value) query.set(key, value.slice(0, 90));
+export default function CargasPage() {
+  return (
+    <Access>
+      <CargoWorkspace />
+    </Access>
+  );
+}
+
+function CargoWorkspace() {
+  const { user, token, loading: sessionLoading } = useSession();
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<SearchResult>({ items: [], total: 0, page: 1, limit: 12 });
+  const [ownCargos, setOwnCargos] = useState<Cargo[]>([]);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setSearch(window.location.search);
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!ready || sessionLoading || !user) return;
+    const controller = new AbortController();
+    setBusy(true);
+    setError('');
+    if (user.role === 'CLIENT') {
+      void apiFetch<Cargo[]>('/cargos/me', { token: token!, signal: controller.signal })
+        .then(setOwnCargos)
+        .catch((reason) => {
+          if (!controller.signal.aborted) setError((reason as Error).message);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setBusy(false);
+        });
+    } else if (user.role === 'TRANSPORTER') {
+      const params = new URLSearchParams(search);
+      const query = new URLSearchParams();
+      for (const name of filterNames) {
+        const value = params.get(name)?.trim();
+        if (value) query.set(name, value.slice(0, 90));
+      }
+      const page = Math.max(1, Math.floor(Number(params.get('page')) || 1));
+      if (page > 1) query.set('page', String(page));
+      void apiFetch<SearchResult>(`/cargos?${query.toString()}`, {
+        token: token!,
+        signal: controller.signal,
+      })
+        .then(setResults)
+        .catch((reason) => {
+          if (!controller.signal.aborted) setError((reason as Error).message);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setBusy(false);
+        });
+    } else {
+      setBusy(false);
+      router.replace('/dashboard');
+    }
+    return () => controller.abort();
+  }, [ready, search, sessionLoading, user, token, router]);
+
+  if (user?.role === 'ADMIN') {
+    return (
+      <main className="cargo-search-page mx-auto max-w-7xl px-4 py-10 sm:px-6">
+        <div className="trip-surface p-8 text-center text-sm text-slate-600" role="status">
+          Abriendo el panel de administración…
+        </div>
+      </main>
+    );
   }
-  const pageNumber = Math.max(1, Math.floor(Number(getSingle(params, 'page')) || 1));
-  const safePage = Math.min(100_000, pageNumber);
-  if (safePage > 1) query.set('page', String(safePage));
-  let response: CargosResponse = { items: [], total: 0, page: safePage, limit: 12 };
-  let error = '';
-  try {
-    response = await apiFetch<CargosResponse>(`/cargos?${query.toString()}`);
-  } catch (reason) {
-    error =
-      reason instanceof Error
-        ? `No fue posible cargar las cargas: ${reason.message}`
-        : 'No fue posible cargar las cargas por un error inesperado.';
+
+  if (sessionLoading || !ready || !user || busy) {
+    return (
+      <main className="cargo-search-page mx-auto max-w-7xl px-4 py-10 sm:px-6">
+        <div className="trip-surface p-8 text-center text-sm text-slate-600" role="status">
+          {sessionLoading || !ready ? 'Cargando tu cuenta…' : 'Cargando cargas…'}
+        </div>
+      </main>
+    );
   }
-  const pages = Math.max(1, Math.ceil(response.total / Math.max(response.limit, 1)));
-  const activeFilterCount = fields.filter((key) => Boolean(getSingle(params, key))).length;
-  function pageHref(page: number) {
-    const next = new URLSearchParams(query);
+
+  if (user.role === 'CLIENT') {
+    return (
+      <main className="cargo-search-page mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-10">
+        <div className="cargo-board-title-row">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.13em] text-blue-700">
+              Panel de empresa
+            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+              Mis cargas
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Aquí solo aparecen las cargas que publicaste.
+            </p>
+          </div>
+          <Link href="/publicar-carga" className="dashboard-trip-follow focus-ring">
+            + Publicar carga
+          </Link>
+        </div>
+        {error && (
+          <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">
+            {error}
+          </p>
+        )}
+        {ownCargos.length ? (
+          <section className="grid gap-3" aria-label="Mis cargas publicadas">
+            {ownCargos.map((cargo) => (
+              <CargoCard
+                key={cargo.id}
+                cargo={{
+                  ...cargo,
+                  pickupWindowStart: cargo.pickupWindowStart,
+                  weightKg: cargo.weightKg,
+                  estimatedBudgetCop: cargo.estimatedBudgetCop,
+                  requiredVehicleType: cargo.requiredVehicleType ?? '',
+                  category: cargo.category ?? 'Otros',
+                }}
+              />
+            ))}
+          </section>
+        ) : (
+          <section className="cargo-board-empty">
+            <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+              <Package />
+            </span>
+            <h2 className="mt-4 font-bold text-slate-900">Aún no publicas una carga</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Publica la primera y recibe ofertas de transportadores.
+            </p>
+            <Link href="/publicar-carga" className="dashboard-trip-follow focus-ring mt-4">
+              Publicar mi carga
+            </Link>
+          </section>
+        )}
+      </main>
+    );
+  }
+
+  const params = new URLSearchParams(search);
+  const value = (key: string) => params.get(key) ?? '';
+  const activeFilterCount = filterNames.filter((key) => Boolean(value(key))).length;
+  const pages = Math.max(1, Math.ceil(results.total / Math.max(results.limit, 1)));
+  const pageHref = (page: number) => {
+    const next = new URLSearchParams(search);
     next.set('page', String(page));
     return `/cargas?${next.toString()}`;
-  }
+  };
 
   return (
     <main className="cargo-search-page mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-9">
+      <div className="cargo-board-title-row">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.13em] text-blue-700">
+            Oportunidades para tu ruta
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+            Explorar cargas
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Encuentra la carga ideal para tus vehículos.
+          </p>
+        </div>
+        <span className="rounded-full border border-blue-100 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm">
+          {results.total} {results.total === 1 ? 'carga disponible' : 'cargas disponibles'}
+        </span>
+      </div>
       <CompatibleCargos />
       <details
-        className="cargo-filter-panel mb-7 overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_8px_30px_rgba(15,47,79,0.045)]"
-        open={fields.some((key) => Boolean(getSingle(params, key)))}
+        className="cargo-filter-panel mb-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_8px_30px_rgba(15,47,79,0.045)]"
+        open={activeFilterCount > 0}
       >
-        <summary className="flex min-h-[4.5rem] cursor-pointer list-none items-center gap-3 px-4 py-4 sm:px-6">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
-            <SlidersHorizontal className="h-[18px] w-[18px]" />
+        <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 py-3 sm:px-5">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-700">
+            <SlidersHorizontal className="h-4 w-4" />
           </span>
           <span className="min-w-0">
-            <span className="block text-sm font-bold text-slate-900">Afina tu búsqueda</span>
-            <span className="mt-0.5 block text-xs text-slate-500">
-              Ruta, mercancía, vehículo, presupuesto y fechas
-            </span>
+            <span className="block text-sm font-bold text-slate-900">Filtros de búsqueda</span>
+            <span className="text-xs text-slate-500">Ruta, mercancía, vehículo y fecha</span>
           </span>
           {activeFilterCount > 0 && (
             <span className="ml-auto rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-800">
@@ -93,264 +222,203 @@ export default async function CargasPage({
         <form
           action="/cargas"
           method="GET"
-          className="grid gap-x-4 gap-y-4 border-t border-slate-100 bg-[#fbfcfe] p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-4"
+          className="grid gap-3 border-t border-slate-100 bg-[#fbfcfe] p-4 sm:grid-cols-2 lg:grid-cols-4"
         >
-          <div className="cargo-filter-group sm:col-span-2 lg:col-span-4">
-            <MapPin className="h-4 w-4" />
-            <span>Ruta</span>
-            <i />
-          </div>
-          {[
-            ['originDepartment', 'Departamento de origen', 'text'],
-            ['originCity', 'Municipio de origen', 'text'],
-            ['destinationDepartment', 'Departamento de destino', 'text'],
-            ['destinationCity', 'Municipio de destino', 'text'],
-          ].map(([name, label, type]) => (
-            <label key={name} className="field">
-              {label}
-              <input
-                className="input"
-                name={name}
-                type={type}
-                maxLength={90}
-                defaultValue={getSingle(params, name)}
-                placeholder="Cualquier ubicación"
-              />
-            </label>
-          ))}
-          <div className="cargo-filter-group mt-1 sm:col-span-2 lg:col-span-4">
-            <Package className="h-4 w-4" />
-            <span>Detalles de la carga</span>
-            <i />
-          </div>
+          <label className="field">
+            Origen
+            <input
+              className="input"
+              name="originCity"
+              defaultValue={value('originCity')}
+              placeholder="Cualquier ciudad"
+            />
+          </label>
+          <label className="field">
+            Destino
+            <input
+              className="input"
+              name="destinationCity"
+              defaultValue={value('destinationCity')}
+              placeholder="Cualquier ciudad"
+            />
+          </label>
           <label className="field">
             Tipo de mercancía
-            <select className="input" name="category" defaultValue={getSingle(params, 'category')}>
-              <option value="">Cualquier categoría</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
+            <select className="input" name="category" defaultValue={value('category')}>
+              <option value="">Todas</option>
+              {categories.map((item) => (
+                <option key={item}>{item}</option>
               ))}
             </select>
           </label>
           <label className="field">
-            Tipo de vehículo
-            <select
-              className="input"
-              name="vehicleType"
-              defaultValue={getSingle(params, 'vehicleType')}
-            >
-              <option value="">Cualquier tipo</option>
-              {Object.entries(vehicleTypes).map(([value, label]) => (
-                <option key={value} value={value}>
+            Vehículo
+            <select className="input" name="vehicleType" defaultValue={value('vehicleType')}>
+              <option value="">Todos</option>
+              {Object.entries(vehicleTypes).map(([key, label]) => (
+                <option key={key} value={key}>
                   {label}
                 </option>
               ))}
             </select>
           </label>
           <label className="field">
-            Carrocería requerida
-            <select className="input" name="bodyType" defaultValue={getSingle(params, 'bodyType')}>
-              <option value="">Cualquier carrocería</option>
-              {Object.entries(bodyTypes).map(([value, label]) => (
-                <option key={value} value={value}>
+            Carrocería
+            <select className="input" name="bodyType" defaultValue={value('bodyType')}>
+              <option value="">Todas</option>
+              {Object.entries(bodyTypes).map(([key, label]) => (
+                <option key={key} value={key}>
                   {label}
                 </option>
               ))}
             </select>
           </label>
           <label className="field">
-            Presupuesto máximo (COP)
+            Presupuesto máximo
             <input
               className="input"
               name="maxBudgetCop"
-              inputMode="numeric"
               type="number"
               min="0"
-              step="10000"
-              defaultValue={getSingle(params, 'maxBudgetCop')}
+              defaultValue={value('maxBudgetCop')}
               placeholder="Sin límite"
             />
           </label>
-          <label className="field">
-            Peso mínimo (kg)
-            <input
-              className="input"
-              name="minWeightKg"
-              type="number"
-              min="1"
-              step="1"
-              defaultValue={getSingle(params, 'minWeightKg')}
-              placeholder="Sin mínimo"
-            />
-          </label>
-          <label className="field">
-            Peso máximo (kg)
-            <input
-              className="input"
-              name="maxWeightKg"
-              type="number"
-              min="1"
-              step="1"
-              defaultValue={getSingle(params, 'maxWeightKg')}
-              placeholder="Sin máximo"
-            />
-          </label>
-          <div className="cargo-filter-group mt-1 sm:col-span-2 lg:col-span-4">
-            <CalendarDays className="h-4 w-4" />
-            <span>Programación</span>
-            <i />
-          </div>
           <label className="field">
             Recogida desde
             <input
               className="input"
               name="pickupAfter"
               type="date"
-              defaultValue={getSingle(params, 'pickupAfter')}
-            />
-          </label>
-          <label className="field">
-            Recogida hasta
-            <input
-              className="input"
-              name="pickupBefore"
-              type="date"
-              defaultValue={getSingle(params, 'pickupBefore')}
+              defaultValue={value('pickupAfter')}
             />
           </label>
           <label className="field">
             Ordenar por
-            <select
-              className="input"
-              name="sort"
-              defaultValue={getSingle(params, 'sort') || 'recent'}
-            >
+            <select className="input" name="sort" defaultValue={value('sort') || 'recent'}>
               <option value="recent">Más recientes</option>
-              <option value="pickupDate">Recogida más cercana</option>
+              <option value="pickupDate">Recogida próxima</option>
               <option value="budgetDesc">Mayor presupuesto</option>
               <option value="budgetAsc">Menor presupuesto</option>
             </select>
           </label>
-          <input type="hidden" name="page" value="1" />
-          <div className="flex flex-wrap items-end gap-2 pt-1 sm:col-span-2 lg:col-span-4">
-            <Button className="h-11 rounded-xl px-5 shadow-[0_5px_12px_rgba(15,47,79,0.16)]">
+          <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
+            <Button>
               <Search className="h-4 w-4" />
               Aplicar filtros
             </Button>
             <Link
+              className="inline-flex min-h-11 items-center px-3 text-sm text-slate-600"
               href="/cargas"
-              className="focus-ring inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm font-medium text-slate-600 hover:bg-white"
             >
-              Limpiar filtros
+              Limpiar
             </Link>
           </div>
         </form>
       </details>
       {error && (
-        <p role="alert" className="mb-5 rounded-xl bg-red-50 p-4 text-sm text-red-800">
+        <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">
           {error}
         </p>
       )}
-      <div
-        id="resultados"
-        className="mb-4 flex flex-wrap items-end justify-between gap-3 scroll-mt-24"
-      >
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.13em] text-blue-700">
-            Tablero de oportunidades
-          </p>
-          <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
-            Cargas disponibles
-          </h1>
+      <div className="cargo-board-layout" id="resultados">
+        <div className="cargo-board-map-column">
+          <CargoBoardMap
+            cargos={results.items.map((cargo) => ({
+              id: cargo.id,
+              title: cargo.title,
+              originCity: cargo.originCity,
+              destinationCity: cargo.destinationCity,
+              pickupLat: cargo.pickupLat,
+              pickupLng: cargo.pickupLng,
+              deliveryLat: cargo.deliveryLat,
+              deliveryLng: cargo.deliveryLng,
+            }))}
+          />
         </div>
-        <p className="text-sm text-slate-500">
-          Mostrando{' '}
-          <strong className="font-semibold text-slate-800">{response.items.length}</strong> de{' '}
-          <strong className="font-semibold text-slate-800">{response.total}</strong>
-        </p>
-      </div>
-      {!error && response.items.length === 0 && (
-        <section className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-12 text-center">
-          <p className="font-semibold text-slate-900">No encontramos cargas con esos filtros.</p>
-          <p className="mt-2 text-sm text-slate-500">
-            Prueba con otra ciudad, otro vehículo o más fechas.
-          </p>
-          <Link
-            className="mt-4 inline-block text-sm font-semibold text-blue-700 underline"
-            href="/cargas"
-          >
-            Quitar todos los filtros
-          </Link>
-        </section>
-      )}
-      <section className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {response.items.map((cargo) => (
-          <CargoCard key={cargo.id} cargo={cargo} />
-        ))}
-      </section>
-      {response.total > response.limit && (
-        <nav
-          aria-label="Páginas de resultados"
-          className="mt-8 flex flex-wrap items-center justify-center gap-2"
-        >
-          <a
-            aria-disabled={response.page <= 1}
-            className={`focus-ring rounded-lg border px-4 py-2 text-sm ${response.page <= 1 ? 'pointer-events-none opacity-40' : 'hover:bg-white'}`}
-            href={pageHref(Math.max(1, response.page - 1))}
-          >
-            Anterior
-          </a>
-          <span className="px-3 text-sm text-slate-600">
-            Página {response.page} de {pages}
-          </span>
-          <a
-            aria-disabled={response.page >= pages}
-            className={`focus-ring rounded-lg border px-4 py-2 text-sm ${response.page >= pages ? 'pointer-events-none opacity-40' : 'hover:bg-white'}`}
-            href={pageHref(Math.min(pages, response.page + 1))}
-          >
-            Siguiente
-          </a>
-        </nav>
-      )}
-      <section className="cargo-search-hero relative mb-7 overflow-hidden rounded-[1.75rem] px-6 py-8 text-white sm:px-9 sm:py-10 lg:px-12">
-        <div className="cargo-hero-route" aria-hidden="true">
-          <span />
-          <i />
-          <b />
-        </div>
-        <div className="relative z-[1] max-w-3xl">
-          <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-100">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Marketplace de carga en Colombia
-          </p>
-          <h2 className="max-w-2xl text-3xl font-semibold leading-tight tracking-[-0.035em] sm:text-4xl lg:text-[2.75rem]">
-            Una buena ruta empieza con la carga correcta.
-          </h2>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-blue-100 sm:text-base">
-            Explora oportunidades y encuentra el próximo trayecto para tu vehículo.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <a
-              href="#resultados"
-              className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-[#0b2545] transition hover:-translate-y-0.5 hover:bg-blue-50"
-            >
-              Explorar cargas <ArrowDown className="h-4 w-4" />
-            </a>
-            <PublishCargoAction className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 px-4 text-sm font-semibold text-white transition hover:bg-white/10" />
+        <section className="cargo-board-list-column" aria-label="Resultados de cargas">
+          <div className="cargo-board-list-heading">
+            <div>
+              <h2>Cargas disponibles</h2>
+              <p>
+                Mostrando {results.items.length} de {results.total}
+              </p>
+            </div>
+            <form action="/cargas" className="cargo-sort-form">
+              {filterNames
+                .filter((key) => key !== 'sort')
+                .map((key) =>
+                  value(key) ? (
+                    <input key={key} type="hidden" name={key} value={value(key)} />
+                  ) : null,
+                )}
+              <input type="hidden" name="page" value="1" />
+              <label className="sr-only" htmlFor="cargo-sort">
+                Ordenar cargas
+              </label>
+              <select
+                id="cargo-sort"
+                name="sort"
+                className="cargo-sort-select"
+                defaultValue={value('sort') || 'recent'}
+              >
+                <option value="recent">Más recientes</option>
+                <option value="pickupDate">Recogida próxima</option>
+                <option value="budgetDesc">Mayor presupuesto</option>
+                <option value="budgetAsc">Menor presupuesto</option>
+              </select>
+              <button type="submit" className="cargo-sort-apply">
+                Aplicar
+              </button>
+            </form>
           </div>
-        </div>
-        <div className="relative z-[1] mt-8 flex flex-wrap gap-x-7 gap-y-3 border-t border-white/15 pt-5 text-sm text-blue-100 sm:absolute sm:bottom-8 sm:right-9 sm:mt-0 sm:border-0 sm:pt-0 lg:right-12">
-          <span>
-            <strong className="mr-1.5 text-xl font-semibold text-white">{response.total}</strong>
-            {response.total === 1 ? 'carga' : 'cargas'} encontradas
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4 text-emerald-300" /> Oportunidades actualizadas
-          </span>
-        </div>
-      </section>
+          {!results.items.length && (
+            <div className="cargo-board-empty">
+              <p className="font-semibold text-slate-900">
+                No encontramos cargas con esos filtros.
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                Prueba con otra ciudad, vehículo o fecha.
+              </p>
+              <Link
+                className="mt-4 inline-block text-sm font-semibold text-blue-700 underline"
+                href="/cargas"
+              >
+                Quitar filtros
+              </Link>
+            </div>
+          )}
+          <div className="grid gap-3">
+            {results.items.map((cargo) => (
+              <CargoCard key={cargo.id} cargo={cargo} />
+            ))}
+          </div>
+          {results.total > results.limit && (
+            <nav
+              aria-label="Páginas de resultados"
+              className="mt-5 flex items-center justify-center gap-2"
+            >
+              <a
+                aria-disabled={results.page <= 1}
+                className="rounded-lg border bg-white px-4 py-2 text-sm"
+                href={pageHref(Math.max(1, results.page - 1))}
+              >
+                Anterior
+              </a>
+              <span className="px-2 text-sm text-slate-600">
+                Página {results.page} de {pages}
+              </span>
+              <a
+                aria-disabled={results.page >= pages}
+                className="rounded-lg border bg-white px-4 py-2 text-sm"
+                href={pageHref(Math.min(pages, results.page + 1))}
+              >
+                Siguiente
+              </a>
+            </nav>
+          )}
+        </section>
+      </div>
     </main>
   );
 }

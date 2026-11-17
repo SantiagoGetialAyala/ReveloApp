@@ -13,6 +13,7 @@ import { ProposalNegotiation } from '../../components/proposal-negotiation';
 import { RouteMap } from '../../components/route-map';
 import { TripReviews } from '../../components/trip-reviews';
 import { bodyTypes, vehicleTypes } from '../../lib/catalogs';
+import { ArrowRight, BellRing, MapPin, Package, Truck } from 'lucide-react';
 
 type AdminStats = {
   users: number;
@@ -261,22 +262,78 @@ function DashboardTripCard({
     AT_PICKUP: 'Iniciar transporte',
     IN_TRANSIT: 'Marcar entrega',
   };
+  const image =
+    trip.cargo.images?.[0]?.url || tripImageForCategory(trip.cargo.category, trip.cargo.title);
+  const progressIndex =
+    trip.status === 'PENDING_PICKUP' || trip.status === 'AT_PICKUP'
+      ? 0
+      : trip.status === 'IN_TRANSIT'
+        ? 1
+        : 2;
+  const completed = trip.status === 'COMPLETED';
   return (
-    <article className="dashboard-trip-card panel" key={trip.id}>
-      <h4 className="font-semibold">{trip.cargo.title}</h4>
-      <p>
-        {trip.cargo.originCity} → {trip.cargo.destinationCity} · {moneyCop(trip.agreedPriceCop)}
-      </p>
-      <p className="mt-2">
-        {statuses[trip.status]} · {trip.vehicle.plate}
-      </p>
-      <ContactInfo contact={client ? trip.transporter : trip.client} />
-      <Link
-        href={`/viajes/${trip.id}`}
-        className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 focus-ring"
-      >
-        Ver seguimiento y mapa <span aria-hidden="true">→</span>
-      </Link>
+    <article
+      className={`dashboard-trip-card panel ${!completed && trip.status !== 'CANCELLED' ? 'dashboard-trip-card-active' : ''}`}
+      key={trip.id}
+    >
+      <div className="dashboard-trip-card-main">
+        <div
+          role="img"
+          aria-label={trip.cargo.images?.[0]?.alt || `Mercancía: ${trip.cargo.title}`}
+          className="dashboard-trip-photo"
+          style={{ backgroundImage: `url("${image}")` }}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h4 className="truncate text-base font-bold tracking-tight text-slate-950">
+                {trip.cargo.title}
+              </h4>
+              <p className="mt-1 text-sm font-medium text-slate-600">
+                {trip.cargo.originCity} <span className="px-1 text-blue-700">→</span>{' '}
+                {trip.cargo.destinationCity}
+              </p>
+            </div>
+            <span
+              className={`trip-status-pill ${completed ? 'is-complete' : trip.status === 'CANCELLED' ? 'is-cancelled' : 'is-active'}`}
+            >
+              {statuses[trip.status] ?? trip.status}
+            </span>
+          </div>
+          <p className="mt-2 text-sm font-bold text-[#0b2545]">{moneyCop(trip.agreedPriceCop)}</p>
+          <div
+            className="trip-progress-row"
+            aria-label={`Progreso: ${statuses[trip.status] ?? trip.status}`}
+          >
+            {['Recogida', 'En ruta', 'Entrega'].map((label, index) => {
+              const reached =
+                completed || index < progressIndex || (trip.status === 'DELIVERED' && index < 2);
+              const current = !completed && trip.status !== 'CANCELLED' && index === progressIndex;
+              return (
+                <div
+                  className={`trip-progress-step ${reached ? 'is-reached' : ''} ${current ? 'is-current' : ''}`}
+                  key={label}
+                >
+                  <span className="trip-progress-track">
+                    <i />
+                  </span>
+                  <span className="trip-progress-label">{label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <div className="dashboard-trip-card-footer">
+        <span className="text-xs text-slate-500">Vehículo · {trip.vehicle.plate}</span>
+        <Link href={`/viajes/${trip.id}`} className="dashboard-trip-follow focus-ring">
+          Ver seguimiento <span aria-hidden="true">→</span>
+        </Link>
+      </div>
+      <details className="dashboard-trip-contact">
+        <summary>Ver contacto del viaje</summary>
+        <ContactInfo contact={client ? trip.transporter : trip.client} />
+      </details>
       {!client && nextStatus[trip.status] && (
         <Button
           className="mt-3"
@@ -310,6 +367,17 @@ function DashboardTripCard({
       )}
     </article>
   );
+}
+
+function tripImageForCategory(category?: string, title = '') {
+  const value = `${category ?? ''} ${title}`.toLocaleLowerCase('es');
+  if (value.includes('leche') || value.includes('láct') || value.includes('lact'))
+    return '/images/cargo/lacteos.svg';
+  if (value.includes('alimento') || value.includes('fruta') || value.includes('agrícola'))
+    return '/images/cargo/alimentos.svg';
+  if (value.includes('constru') || value.includes('cemento') || value.includes('material'))
+    return '/images/cargo/construccion.svg';
+  return '/images/cargo/alimentos.svg';
 }
 function dashboardMetricHref(label: string, client: boolean) {
   const metric = label.toLocaleLowerCase('es');
@@ -378,10 +446,11 @@ function Dashboard() {
         const newestPendingTime = (cargoId: string) =>
           (incomingByCargo[cargoId] ?? [])
             .filter((proposal) => proposal.status === 'PENDING')
-            .reduce((newest, proposal) => Math.max(newest, new Date(proposal.createdAt).getTime()), 0);
-        setCargos(
-          [...items].sort((a, b) => newestPendingTime(b.id) - newestPendingTime(a.id)),
-        );
+            .reduce(
+              (newest, proposal) => Math.max(newest, new Date(proposal.createdAt).getTime()),
+              0,
+            );
+        setCargos([...items].sort((a, b) => newestPendingTime(b.id) - newestPendingTime(a.id)));
         setReceived(incomingByCargo);
       } else {
         setProposals(work as Proposal[]);
@@ -514,6 +583,34 @@ function Dashboard() {
       proposals.filter((proposal) => ['REJECTED', 'WITHDRAWN'].includes(proposal.status)).length,
     ],
   ] as const;
+  const priorityCounteroffers = proposals
+    .filter(
+      (proposal) =>
+        proposal.status === 'PENDING' &&
+        proposal.priceHistory?.[0]?.senderId === proposal.cargo.clientId,
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.priceHistory?.[0]?.createdAt ?? 0).getTime() -
+        new Date(a.priceHistory?.[0]?.createdAt ?? 0).getTime(),
+    );
+  const featuredClientOffer = client
+    ? (cargos
+        .flatMap((cargo) =>
+          (received[cargo.id] ?? [])
+            .filter(
+              (proposal) =>
+                proposal.status === 'PENDING' &&
+                proposal.priceHistory?.[0]?.senderId === proposal.transporterId,
+            )
+            .map((proposal) => ({ cargo, proposal })),
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.proposal.priceHistory?.[0]?.createdAt ?? b.proposal.createdAt).getTime() -
+            new Date(a.proposal.priceHistory?.[0]?.createdAt ?? a.proposal.createdAt).getTime(),
+        )[0] ?? null)
+    : null;
   if (admin)
     return (
       <main className="dashboard-page mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -583,6 +680,167 @@ function Dashboard() {
         <p role="status" className="mt-6">
           Cargando tu información…
         </p>
+      )}
+      {!client && priorityCounteroffers.length > 0 && (
+        <section className="mb-6 space-y-3" aria-labelledby="priority-counteroffers-title">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-amber-800">
+                <BellRing aria-hidden="true" className="h-4 w-4" /> Alerta prioritaria
+              </p>
+              <h2
+                id="priority-counteroffers-title"
+                className="mt-1 text-lg font-bold text-slate-950"
+              >
+                La empresa respondió a tu oferta
+              </h2>
+            </div>
+            <span className="rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">
+              {priorityCounteroffers.length} por revisar
+            </span>
+          </div>
+          {priorityCounteroffers.map((proposal) => {
+            const offer = proposal.priceHistory?.[0];
+            return (
+              <article
+                key={proposal.id}
+                className="rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm sm:p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
+                      Contraoferta de la empresa
+                    </p>
+                    <h3 className="mt-1 text-lg font-bold text-slate-950">
+                      {proposal.cargo.title}
+                    </h3>
+                    <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-700">
+                      <MapPin aria-hidden="true" className="h-4 w-4 shrink-0 text-amber-800" />
+                      {proposal.cargo.originCity} → {proposal.cargo.destinationCity}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-white px-4 py-3">
+                    <p className="text-xs font-semibold text-slate-500">Precio propuesto</p>
+                    <strong className="mt-1 block text-xl tabular-nums text-slate-950">
+                      {moneyCop(offer?.priceCop ?? proposal.proposedPriceCop)}
+                    </strong>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                  <p className="flex items-center gap-2 rounded-xl bg-white/80 p-3">
+                    <Truck aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
+                    {proposal.vehicle.plate} · {Number(proposal.vehicle.maxWeightKg) / 1000} t
+                  </p>
+                  <p className="rounded-xl bg-white/80 p-3">
+                    Recogida disponible:{' '}
+                    <strong>
+                      {new Date(proposal.availablePickupDate).toLocaleDateString('es-CO')}
+                    </strong>
+                  </p>
+                  <p className="rounded-xl bg-white/80 p-3">
+                    Presupuesto de carga:{' '}
+                    <strong>{moneyCop(proposal.cargo.estimatedBudgetCop)}</strong>
+                  </p>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-amber-950">
+                    Revisa el nuevo precio y acepta o continúa negociando.
+                  </p>
+                  <ProposalNegotiation
+                    proposalId={proposal.id}
+                    publishedPriceCop={proposal.cargo.estimatedBudgetCop}
+                    onAccept={() => void action(proposal.id, 'accept')}
+                    triggerLabel="Revisar contraoferta"
+                    triggerClassName="border-amber-300 bg-amber-100 text-amber-950 hover:bg-amber-200"
+                  />
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      )}
+      {client && featuredClientOffer && (
+        <section
+          className="panel mb-6 overflow-hidden border border-blue-200 p-0"
+          aria-labelledby="featured-client-offer-title"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 bg-blue-50 px-4 py-3 sm:px-5">
+            <p className="flex items-center gap-2 text-sm font-bold text-blue-950">
+              <BellRing aria-hidden="true" className="h-4 w-4 text-blue-700" />
+              Nueva oferta recibida
+            </p>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-800">
+              Revisar primero
+            </span>
+          </div>
+          <div className="p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 id="featured-client-offer-title" className="text-xl font-bold text-slate-950">
+                  {featuredClientOffer.cargo.title}
+                </h2>
+                <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-600">
+                  <MapPin aria-hidden="true" className="h-4 w-4 shrink-0" />
+                  {featuredClientOffer.cargo.originCity} →{' '}
+                  {featuredClientOffer.cargo.destinationCity}
+                </p>
+              </div>
+              <div className="rounded-xl bg-emerald-50 px-4 py-3">
+                <p className="text-xs font-semibold text-emerald-800">Oferta del conductor</p>
+                <strong className="mt-1 block text-2xl tabular-nums text-emerald-950">
+                  {moneyCop(featuredClientOffer.proposal.proposedPriceCop)}
+                </strong>
+              </div>
+            </div>
+            <ContactInfo contact={featuredClientOffer.proposal.transporter} />
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              <p className="flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm">
+                <Truck aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
+                {featuredClientOffer.proposal.vehicle.plate} ·{' '}
+                {featuredClientOffer.proposal.vehicle.brand}{' '}
+                {featuredClientOffer.proposal.vehicle.model} ·{' '}
+                {Number(featuredClientOffer.proposal.vehicle.maxWeightKg) / 1000} t
+              </p>
+              <p className="rounded-xl bg-slate-50 p-3 text-sm">
+                Recogida disponible:{' '}
+                <strong>
+                  {new Date(featuredClientOffer.proposal.availablePickupDate).toLocaleString(
+                    'es-CO',
+                  )}
+                </strong>
+              </p>
+              <p className="rounded-xl bg-slate-50 p-3 text-sm">
+                Duración estimada:{' '}
+                <strong>{featuredClientOffer.proposal.estimatedTransportHours} horas</strong>
+              </p>
+              <p className="rounded-xl bg-slate-50 p-3 text-sm">
+                Peso de la carga:{' '}
+                <strong>
+                  {Number(featuredClientOffer.cargo.weightKg).toLocaleString('es-CO')} kg
+                </strong>
+              </p>
+              <p className="rounded-xl bg-slate-50 p-3 text-sm">
+                Presupuesto publicado:{' '}
+                <strong>{moneyCop(featuredClientOffer.cargo.estimatedBudgetCop)}</strong>
+              </p>
+            </div>
+            {featuredClientOffer.proposal.message && (
+              <p className="mt-3 rounded-xl border border-slate-100 bg-white p-3 text-sm text-slate-700">
+                “{featuredClientOffer.proposal.message}”
+              </p>
+            )}
+            <button
+              type="button"
+              className="focus-ring mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#123b63]"
+              onClick={() => {
+                setExpandedCargoId(featuredClientOffer.cargo.id);
+                document.getElementById('mis-cargas')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              Revisar y responder oferta <ArrowRight aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </div>
+        </section>
       )}
       <section className="my-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {(client
@@ -671,18 +929,37 @@ function Dashboard() {
                   // React clears currentTarget after the event callback. Read `open`
                   // before scheduling a state updater, which may run later.
                   const isOpen = event.currentTarget.open;
-                  setExpandedCargoId((current) => (isOpen ? c.id : current === c.id ? null : current));
+                  setExpandedCargoId((current) =>
+                    isOpen ? c.id : current === c.id ? null : current,
+                  );
                 }}
                 className="dashboard-cargo-card panel group"
               >
-                <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 rounded-xl focus-ring">
-                  <span className="min-w-0 flex-1">
+                <summary className="flex cursor-pointer list-none items-center gap-4 rounded-xl focus-ring">
+                  <span
+                    role="img"
+                    aria-label={
+                      c.images?.[0] ? c.images[0].alt || `Foto de ${c.title}` : 'Carga sin foto'
+                    }
+                    className={`grid h-[76px] w-[88px] shrink-0 place-items-center rounded-xl bg-cover bg-center text-blue-300 ${c.images?.[0] ? '' : 'bg-gradient-to-br from-blue-50 to-slate-100'}`}
+                    style={
+                      c.images?.[0] ? { backgroundImage: `url("${c.images[0].url}")` } : undefined
+                    }
+                  >
+                    {!c.images?.[0] && <Package className="h-6 w-6" aria-hidden="true" />}
+                  </span>
+                  <span className="min-w-0 flex-1 py-1">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold text-slate-950">{c.title}</span>
+                      <span className="font-bold tracking-tight text-slate-950">{c.title}</span>
                       <span className="dashboard-status-pill">{statuses[c.status]}</span>
                     </span>
-                    <span className="mt-1 block text-sm text-slate-600">
-                      {c.originCity} → {c.destinationCity} · {moneyCop(c.estimatedBudgetCop)}
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-slate-600">
+                      <span>
+                        {c.originCity} → {c.destinationCity}
+                      </span>
+                      <span className="font-semibold text-[#0b2545]">
+                        {moneyCop(c.estimatedBudgetCop)}
+                      </span>
                     </span>
                     <span className="mt-1 block text-xs text-slate-500">
                       {received[c.id]?.length ?? 0}{' '}
@@ -691,9 +968,13 @@ function Dashboard() {
                         : 'ofertas recibidas'}
                     </span>
                   </span>
-                  <span className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 group-open:bg-blue-700 group-open:text-white">
+                  <span className="hidden rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 group-open:bg-blue-700 group-open:text-white sm:inline-flex">
                     {expandedCargoId === c.id ? 'Cerrar detalles' : 'Ver detalles'}
                   </span>
+                  <ArrowRight
+                    className="h-4 w-4 shrink-0 text-blue-700 transition group-open:rotate-90 sm:hidden"
+                    aria-hidden="true"
+                  />
                 </summary>
                 <div className="mt-4 border-t border-slate-100 pt-4">
                   <p className="text-sm leading-6 text-slate-600">{c.description}</p>
@@ -798,16 +1079,24 @@ function Dashboard() {
                           defaultValue={c.requiredVehicleType ?? 'VAN'}
                         >
                           {Object.entries(vehicleTypes).map(([value, label]) => (
-                            <option key={value} value={value}>{label}</option>
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
                           ))}
                         </select>
                       </label>
                       <label className="field">
                         Carrocería
-                        <select className="input" name="requiredBodyType" defaultValue={c.requiredBodyType ?? ''}>
+                        <select
+                          className="input"
+                          name="requiredBodyType"
+                          defaultValue={c.requiredBodyType ?? ''}
+                        >
                           <option value="">Cualquiera</option>
                           {Object.entries(bodyTypes).map(([value, label]) => (
-                            <option key={value} value={value}>{label}</option>
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
                           ))}
                         </select>
                       </label>
@@ -844,75 +1133,84 @@ function Dashboard() {
                   )}
                   {[...(received[c.id] ?? [])]
                     .sort((a, b) => {
-                      const pendingOrder = Number(b.status === 'PENDING') - Number(a.status === 'PENDING');
-                      return pendingOrder || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                      const pendingOrder =
+                        Number(b.status === 'PENDING') - Number(a.status === 'PENDING');
+                      return (
+                        pendingOrder ||
+                        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                      );
                     })
                     .map((p) => (
-                    <div key={p.id} className="dashboard-proposal-card mt-4 rounded-lg border p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <strong className="text-lg text-primary">
-                          {moneyCop(p.proposedPriceCop)}
-                        </strong>
-                        <span className="dashboard-status-pill">{statuses[p.status]}</span>
-                      </div>
-                      <ContactInfo contact={p.transporter} />
-                      <div className="my-3 grid gap-2 sm:grid-cols-3">
-                        <div className="rounded-lg bg-slate-50 p-3 text-sm">
-                          <span className="block text-xs text-slate-500">Vehículo</span>
-                          <strong>
-                            {p.vehicle.plate} · {p.vehicle.brand} {p.vehicle.model}
+                      <div
+                        key={p.id}
+                        className="dashboard-proposal-card mt-4 rounded-lg border p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <strong className="text-lg text-primary">
+                            {moneyCop(p.proposedPriceCop)}
                           </strong>
+                          <span className="dashboard-status-pill">{statuses[p.status]}</span>
                         </div>
-                        <div className="rounded-lg bg-slate-50 p-3 text-sm">
-                          <span className="block text-xs text-slate-500">Recogida disponible</span>
-                          <strong>
-                            {new Date(p.availablePickupDate).toLocaleDateString('es-CO')}
-                          </strong>
+                        <ContactInfo contact={p.transporter} />
+                        <div className="my-3 grid gap-2 sm:grid-cols-3">
+                          <div className="rounded-lg bg-slate-50 p-3 text-sm">
+                            <span className="block text-xs text-slate-500">Vehículo</span>
+                            <strong>
+                              {p.vehicle.plate} · {p.vehicle.brand} {p.vehicle.model}
+                            </strong>
+                          </div>
+                          <div className="rounded-lg bg-slate-50 p-3 text-sm">
+                            <span className="block text-xs text-slate-500">
+                              Recogida disponible
+                            </span>
+                            <strong>
+                              {new Date(p.availablePickupDate).toLocaleDateString('es-CO')}
+                            </strong>
+                          </div>
+                          <div className="rounded-lg bg-slate-50 p-3 text-sm">
+                            <span className="block text-xs text-slate-500">Duración estimada</span>
+                            <strong>{p.estimatedTransportHours} horas</strong>
+                          </div>
                         </div>
-                        <div className="rounded-lg bg-slate-50 p-3 text-sm">
-                          <span className="block text-xs text-slate-500">Duración estimada</span>
-                          <strong>{p.estimatedTransportHours} horas</strong>
-                        </div>
-                      </div>
-                      <p className="my-2 text-sm">
-                        {p.vehicle.plate} · {p.vehicle.brand} {p.vehicle.model} ·{' '}
-                        {Number(p.vehicle.maxWeightKg) / 1000} t
-                      </p>
-                      {p.vehicle.photos[0] && (
-                        <img
-                          src={p.vehicle.photos[0]}
-                          alt={`Vehículo ${p.vehicle.plate}`}
-                          className="my-2 h-24 rounded"
+                        <p className="my-2 text-sm">
+                          {p.vehicle.plate} · {p.vehicle.brand} {p.vehicle.model} ·{' '}
+                          {Number(p.vehicle.maxWeightKg) / 1000} t
+                        </p>
+                        {p.vehicle.photos[0] && (
+                          <img
+                            src={p.vehicle.photos[0]}
+                            alt={`Vehículo ${p.vehicle.plate}`}
+                            className="my-2 h-24 rounded"
+                          />
+                        )}
+                        <p className="text-sm">
+                          Recogida: {new Date(p.availablePickupDate).toLocaleString('es-CO')} ·{' '}
+                          {p.estimatedTransportHours} horas
+                        </p>
+                        <p className="mt-2 text-sm">{p.message}</p>
+                        <ProposalNegotiation
+                          proposalId={p.id}
+                          publishedPriceCop={c.estimatedBudgetCop}
                         />
-                      )}
-                      <p className="text-sm">
-                        Recogida: {new Date(p.availablePickupDate).toLocaleString('es-CO')} ·{' '}
-                        {p.estimatedTransportHours} horas
-                      </p>
-                      <p className="mt-2 text-sm">{p.message}</p>
-                      <ProposalNegotiation
-                        proposalId={p.id}
-                        publishedPriceCop={c.estimatedBudgetCop}
-                      />
-                      {p.status === 'PENDING' && c.status === 'OPEN' && (
-                        <div className="mt-3 flex gap-2">
-                          <Button
-                            disabled={!!busy}
-                            onClick={() => void action(p.id, 'accept')}
-                            variant="secondary"
-                          >
-                            {busy === p.id ? 'Procesando…' : 'Aceptar oferta'}
-                          </Button>
-                          <Button
-                            disabled={!!busy}
-                            variant="ghost"
-                            onClick={() => void action(p.id, 'reject')}
-                          >
-                            Rechazar
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+                        {p.status === 'PENDING' && c.status === 'OPEN' && (
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              disabled={!!busy}
+                              onClick={() => void action(p.id, 'accept')}
+                              variant="secondary"
+                            >
+                              {busy === p.id ? 'Procesando…' : 'Aceptar oferta'}
+                            </Button>
+                            <Button
+                              disabled={!!busy}
+                              variant="ghost"
+                              onClick={() => void action(p.id, 'reject')}
+                            >
+                              Rechazar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     ))}
                 </div>
               </details>

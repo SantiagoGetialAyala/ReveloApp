@@ -313,7 +313,7 @@ export class TripsService {
             transporterProfile: true,
           },
         },
-        cargo: true,
+        cargo: { include: { images: true } },
         vehicle: true,
         history: { orderBy: { createdAt: 'desc' } },
       },
@@ -378,7 +378,7 @@ export class TripsService {
             transporterProfile: true,
           },
         },
-        cargo: true,
+        cargo: { include: { images: true } },
         vehicle: true,
         history: { orderBy: { createdAt: 'asc' } },
       },
@@ -409,8 +409,12 @@ export class TripsService {
     if (!trip) throw new NotFoundException('Viaje no encontrado.');
     if (!transitions[trip.status].includes(nextStatus))
       throw new BadRequestException('Transicion de estado invalida.');
-    if (nextStatus === TripStatus.CANCELLED && role !== 'ADMIN' &&
-      trip.clientId !== userId && trip.transporterId !== userId) {
+    if (
+      nextStatus === TripStatus.CANCELLED &&
+      role !== 'ADMIN' &&
+      trip.clientId !== userId &&
+      trip.transporterId !== userId
+    ) {
       throw new ForbiddenException('Solo las personas de este viaje pueden cancelarlo.');
     }
     if (nextStatus === TripStatus.COMPLETED && trip.clientId !== userId) {

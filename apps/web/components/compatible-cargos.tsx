@@ -60,7 +60,7 @@ export function CompatibleCargos() {
             {total} cargas compatibles; no incluye cargas donde ya postulaste.
           </p>
           {items.length ? (
-            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-4 grid gap-3">
               {items.map((cargo) => (
                 <div key={cargo.id} className="relative">
                   <span className="mb-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">

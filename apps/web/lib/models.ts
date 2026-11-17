@@ -30,6 +30,7 @@ export type Cargo = {
   clientId: string;
   title: string;
   description: string;
+  category?: string;
   status: string;
   estimatedBudgetCop: string;
   requiredVehicleType?: string;
@@ -50,15 +51,18 @@ export type Cargo = {
   deliveryLat: string | number;
   deliveryLng: string | number;
   client?: Contact;
+  images?: { id?: string; url: string; alt?: string | null }[];
 };
 export type Proposal = {
   id: string;
+  transporterId?: string;
   createdAt: string;
   status: string;
   proposedPriceCop: string;
   availablePickupDate: string;
   estimatedTransportHours: number;
   message?: string;
+  priceHistory?: { id: string; senderId: string; priceCop: string; createdAt: string }[];
   vehicle: Vehicle;
   transporter?: Contact;
   cargo: Cargo;

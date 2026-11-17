@@ -17,6 +17,19 @@ import {
   Package,
   Truck,
 } from 'lucide-react';
+
+function imageAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('No se pudo leer la imagen.'));
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function PublishCargoPage() {
   return (
     <Access role="CLIENT">
@@ -38,6 +51,8 @@ function CargoForm() {
   const [budget, setBudget] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [imagePreview, setImagePreview] = useState('');
+  const [imageError, setImageError] = useState('');
   const [locationWarning, setLocationWarning] = useState('');
   const [step, setStep] = useState(1);
   const [review, setReview] = useState<Record<string, string>>({});
@@ -58,6 +73,16 @@ function CargoForm() {
     }
     if (step === 1) {
       const data = new FormData(form);
+      const image = data.get('cargoImage');
+      if (image instanceof File && image.size > 0) {
+        if (
+          image.size > 500_000 ||
+          !['image/jpeg', 'image/png', 'image/webp'].includes(image.type)
+        ) {
+          setError('La foto debe ser JPG, PNG o WebP y pesar máximo 500 KB.');
+          return;
+        }
+      }
       const quantity = Number(data.get('quantity'));
       const factor: Record<string, number> = { KG: 1, LB: 0.45359237, TON: 1000 };
       const weight = factor[unit] ? quantity * factor[unit] : Number(data.get('weightKg'));
@@ -125,8 +150,21 @@ function CargoForm() {
       submitLock.current = false;
       return;
     }
+    const cargoImage = f.get('cargoImage');
+    if (
+      cargoImage instanceof File &&
+      cargoImage.size > 0 &&
+      (cargoImage.size > 500_000 ||
+        !['image/jpeg', 'image/png', 'image/webp'].includes(cargoImage.type))
+    ) {
+      setError('La foto debe ser JPG, PNG o WebP y pesar máximo 500 KB.');
+      submitLock.current = false;
+      return;
+    }
     setBusy(true);
     try {
+      const imageData =
+        cargoImage instanceof File && cargoImage.size > 0 ? await imageAsDataUrl(cargoImage) : '';
       const cargo = await apiFetch<{ id: string }>('/cargos', {
         token: token!,
         method: 'POST',
@@ -155,6 +193,7 @@ function CargoForm() {
           requiredBodyType: f.get('requiredBodyType'),
           requiredCapacityKg: weightKg,
           negotiable: f.get('negotiable') === 'on',
+          ...(imageData ? { images: [imageData] } : {}),
         }),
       });
       router.push(`/cargas/${cargo.id}`);
@@ -280,6 +319,62 @@ function CargoForm() {
               Descripción
               <textarea className="input min-h-24" name="description" required />
             </label>
+            <div className="field md:col-span-2">
+              <label htmlFor="cargo-image">
+                Foto de la mercancía <span className="font-normal text-slate-500">(opcional)</span>
+              </label>
+              <p className="text-xs text-slate-500">
+                Una foto ayuda a los transportadores a reconocer la carga. JPG, PNG o WebP · máximo
+                500 KB.
+              </p>
+              <input
+                className="input h-auto py-2.5"
+                id="cargo-image"
+                name="cargoImage"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                aria-describedby="cargo-image-help cargo-image-error"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  setImageError('');
+                  if (!file) {
+                    setImagePreview('');
+                    return;
+                  }
+                  if (
+                    file.size > 500_000 ||
+                    !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+                  ) {
+                    setImageError('Elige una imagen JPG, PNG o WebP de hasta 500 KB.');
+                    setImagePreview('');
+                    event.currentTarget.value = '';
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () =>
+                    setImagePreview(typeof reader.result === 'string' ? reader.result : '');
+                  reader.onerror = () =>
+                    setImageError('No pudimos leer la foto. Intenta con otra.');
+                  reader.readAsDataURL(file);
+                }}
+              />
+              <span id="cargo-image-help" className="sr-only">
+                Foto opcional para mostrar en las tarjetas de carga.
+              </span>
+              {imageError && (
+                <span id="cargo-image-error" role="alert" className="text-sm text-red-700">
+                  {imageError}
+                </span>
+              )}
+              {imagePreview && (
+                <div
+                  role="img"
+                  aria-label="Vista previa de la foto de la mercancía"
+                  className="h-32 w-48 rounded-xl border border-slate-200 bg-cover bg-center"
+                  style={{ backgroundImage: `url("${imagePreview}")` }}
+                />
+              )}
+            </div>
           </div>
         </fieldset>
         <fieldset
@@ -367,7 +462,9 @@ function CargoForm() {
             <label className="field">
               Tipo de vehículo
               <select className="input" name="requiredVehicleType" defaultValue="" required>
-                <option value="" disabled>Selecciona el tipo de vehículo</option>
+                <option value="" disabled>
+                  Selecciona el tipo de vehículo
+                </option>
                 {Object.entries(vehicleTypes).map(([v, l]) => (
                   <option key={v} value={v}>
                     {l}

@@ -34,11 +34,15 @@ export function ProposalNegotiation({
   publishedPriceCop,
   onAccept,
   readOnly = false,
+  triggerLabel,
+  triggerClassName,
 }: {
   proposalId: string;
   publishedPriceCop: string | number;
   onAccept?: () => void;
   readOnly?: boolean;
+  triggerLabel?: string;
+  triggerClassName?: string;
 }) {
   const { token, user } = useSession();
   const [open, setOpen] = useState(false);
@@ -109,10 +113,11 @@ export function ProposalNegotiation({
       <Button
         type="button"
         variant="ghost"
-        className="border border-blue-100 bg-blue-50 text-blue-900 hover:bg-blue-100"
+        className={`border border-blue-100 bg-blue-50 text-blue-900 hover:bg-blue-100 ${triggerClassName ?? ''}`}
         onClick={() => setOpen(true)}
       >
-        <MessageCircle size={16} /> {readOnly ? 'Ver conversación' : 'Abrir chat y negociar'}
+        <MessageCircle size={16} />{' '}
+        {triggerLabel ?? (readOnly ? 'Ver conversación' : 'Abrir chat y negociar')}
       </Button>
       {open && (
         <div

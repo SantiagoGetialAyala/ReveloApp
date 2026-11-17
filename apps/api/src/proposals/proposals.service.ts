@@ -31,8 +31,13 @@ export class ProposalsService {
     ) {
       throw new ForbiddenException('Vehiculo invalido para esta postulacion.');
     }
-    if (Number(vehicle.maxWeightKg) < Number(cargo.requiredCapacityKg)) {
-      throw new BadRequestException('El vehiculo no tiene capacidad suficiente.');
+    // Eligibility is based on the cargo's actual weight. Older cargo records can
+    // have a requiredCapacityKg value above weightKg, which should not block a
+    // truck that can safely carry the load itself.
+    if (Number(vehicle.maxWeightKg) < Number(cargo.weightKg)) {
+      throw new BadRequestException(
+        'La capacidad del vehiculo debe ser igual o superior al peso de la carga.',
+      );
     }
     if (existing?.status === ProposalStatus.PENDING)
       throw new BadRequestException('Ya tienes una postulacion pendiente para esta carga.');
@@ -78,7 +83,7 @@ export class ProposalsService {
           {
             userId: cargo.clientId,
             title: 'Nueva postulación',
-            body: `Recibiste una oferta para ${cargo.title}. Revisa tu panel.`,
+            body: `Un conductor ofreció ${Number(dto.proposedPriceCop).toLocaleString('es-CO')} COP para ${cargo.title}. Revisa los detalles en tu panel.`,
             type: 'PROPOSAL_RECEIVED',
             metadata: { cargoId, proposalId: proposal.id },
           },
@@ -224,7 +229,7 @@ export class ProposalsService {
         data: {
           userId: recipientId,
           title: 'Nueva contraoferta',
-          body: 'Recibiste un nuevo precio para una carga.',
+          body: `${userId === proposal.cargo.clientId ? 'La empresa' : 'El conductor'} propuso ${Number(priceCop).toLocaleString('es-CO')} COP para ${proposal.cargo.title}. Revisa la negociación en tu panel.`,
           type: 'PROPOSAL_COUNTEROFFER',
           metadata: { proposalId: id, cargoId: proposal.cargoId },
         },
@@ -237,6 +242,11 @@ export class ProposalsService {
     const proposals = await this.prisma.proposal.findMany({
       where: { cargoId, cargo: { clientId } },
       include: {
+        priceHistory: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, senderId: true, priceCop: true, createdAt: true },
+        },
         vehicle: {
           select: {
             id: true,
@@ -291,6 +301,11 @@ export class ProposalsService {
     return this.prisma.proposal.findMany({
       where: { transporterId },
       include: {
+        priceHistory: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, senderId: true, priceCop: true, createdAt: true },
+        },
         cargo: {
           include: {
             client: {

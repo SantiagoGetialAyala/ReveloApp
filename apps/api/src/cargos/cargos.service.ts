@@ -71,13 +71,17 @@ export class CargosService {
       { lat: dto.pickupLat, lng: dto.pickupLng },
       { lat: dto.deliveryLat, lng: dto.deliveryLng },
     );
+    const { images, ...cargoData } = dto;
     return this.prisma.cargo.create({
       data: {
-        ...dto,
+        ...cargoData,
         clientId,
         routeDistanceKm: route.distanceKm,
         routeDurationMinutes: route.durationMinutes,
         routeProvider: route.provider,
+        ...(images?.length
+          ? { images: { create: images.map((url) => ({ url, alt: dto.title })) } }
+          : {}),
       },
     });
   }
@@ -183,7 +187,6 @@ export class CargosService {
         {
           OR: vehicles.map((vehicle) => ({
             requiredVehicleType: vehicle.vehicleType,
-            requiredCapacityKg: { lte: vehicle.maxWeightKg },
             weightKg: { lte: vehicle.maxWeightKg },
             OR: [{ requiredBodyType: null }, { requiredBodyType: vehicle.bodyType }],
           })),
@@ -195,15 +198,21 @@ export class CargosService {
   }
 
   findMine(clientId: string) {
-    return this.prisma.cargo.findMany({ where: { clientId }, orderBy: { createdAt: 'desc' } });
+    return this.prisma.cargo.findMany({
+      where: { clientId },
+      orderBy: { createdAt: 'desc' },
+      include: { images: true },
+    });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, userId: string, role: string) {
     const cargo = await this.prisma.cargo.findUnique({
       where: { id },
       include: { images: true },
     });
     if (!cargo) throw new NotFoundException('Carga no encontrada.');
+    if (role === 'CLIENT' && cargo.clientId !== userId)
+      throw new ForbiddenException('Solo puedes consultar las cargas que publicaste.');
     return cargo;
   }
 

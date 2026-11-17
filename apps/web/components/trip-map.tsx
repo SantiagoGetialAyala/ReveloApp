@@ -225,7 +225,7 @@ export function TripMap({
       <div className="relative isolate">
         <div
           ref={container}
-          className="relative z-0 h-[350px] bg-slate-100 sm:h-[460px]"
+          className="relative z-0 h-[260px] bg-slate-100 sm:h-[340px]"
           aria-label="Mapa de origen, destino y última ubicación del vehículo"
         />
         {!ready && !mapError && (

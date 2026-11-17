@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="38" y1="20" x2="432" y2="310" gradientUnits="userSpaceOnUse"><stop stop-color="#EAF3FF"/><stop offset="1" stop-color="#D6E6F5"/></linearGradient>
+    <linearGradient id="bag" x1="120" y1="103" x2="176" y2="230" gradientUnits="userSpaceOnUse"><stop stop-color="#F7F5EF"/><stop offset="1" stop-color="#D4D0C6"/></linearGradient>
+    <filter id="shadow" x="47" y="180" width="394" height="100" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="13"/></filter>
+  </defs>
+  <rect width="480" height="320" rx="28" fill="url(#bg)"/>
+  <path d="M0 250h480v70H0z" fill="#C7D9E8"/>
+  <ellipse cx="242" cy="244" rx="173" ry="20" fill="#7591A8" opacity=".25" filter="url(#shadow)"/>
+  <g stroke="#B1AA9A" stroke-width="3">
+    <path d="m92 196 20-18h84l19 18v53H92v-53Z" fill="url(#bag)"/><path d="M112 178v70m63-70v70m-83-52h123" opacity=".55"/>
+    <path d="m179 196 20-18h84l19 18v53H179v-53Z" fill="url(#bag)"/><path d="M199 178v70m63-70v70m-83-52h123" opacity=".55"/>
+    <path d="m266 196 20-18h84l19 18v53H266v-53Z" fill="url(#bag)"/><path d="M286 178v70m63-70v70m-83-52h123" opacity=".55"/>
+  </g>
+  <path d="M109 122h90l19 18h-90l-19-18Zm96-14h90l19 18h-90l-19-18Zm96 14h63l19 18h-63l-19-18Z" fill="#fff" opacity=".72"/>
+  <rect x="32" y="30" width="94" height="28" rx="14" fill="#fff" opacity=".78"/><circle cx="49" cy="44" r="5" fill="#2563EB"/><path d="M62 44h47" stroke="#7890A8" stroke-linecap="round" stroke-width="4"/>
+</svg>

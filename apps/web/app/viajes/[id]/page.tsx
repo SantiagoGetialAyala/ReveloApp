@@ -16,7 +16,6 @@ import {
   Printer,
   Radio,
   RefreshCw,
-  ShieldCheck,
   Truck,
   UserRound,
 } from 'lucide-react';
@@ -60,6 +59,7 @@ function TripDetail({ id }: { id: string }) {
   const [actionError, setActionError] = useState('');
   const [success, setSuccess] = useState('');
   const [note, setNote] = useState('');
+  const [showNote, setShowNote] = useState(false);
   const [navigationMessage, setNavigationMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
@@ -133,35 +133,20 @@ function TripDetail({ id }: { id: string }) {
     setNavigationMessage('');
     const toPickup = trip.status === 'PENDING_PICKUP';
     const target = toPickup
-      ? { lat: Number(trip.cargo.pickupLat), lng: Number(trip.cargo.pickupLng) }
-      : { lat: Number(trip.cargo.deliveryLat), lng: Number(trip.cargo.deliveryLng) };
+      ? validCoordinates(trip.cargo.pickupLat, trip.cargo.pickupLng)
+      : validCoordinates(trip.cargo.deliveryLat, trip.cargo.deliveryLng);
     const address = toPickup
       ? `${trip.cargo.pickupAddress}, ${trip.cargo.originCity}`
       : `${trip.cargo.deliveryAddress}, ${trip.cargo.destinationCity}`;
-    const tab = window.open('about:blank', '_blank');
+    const destination = target ? `${target.lat},${target.lng}` : address;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+    const tab = window.open(url, '_blank');
     if (!tab) {
       setNavigationMessage('Permite las ventanas emergentes para abrir la navegación en Maps.');
       return;
     }
-    const openDirections = (origin?: { lat: number; lng: number }) => {
-      const from = origin ? `saddr=${encodeURIComponent(`${origin.lat},${origin.lng}`)}&` : '';
-      const url = `https://maps.google.com/maps?${from}daddr=${encodeURIComponent(`${target.lat},${target.lng}`)}&dirflg=d`;
-      tab.location.replace(url);
-      setNavigationMessage(
-        origin
-          ? `Ruta abierta hacia ${address} desde tu ubicación actual.`
-          : `Ruta abierta hacia ${address}. Maps usará la ubicación actual del dispositivo.`,
-      );
-    };
-    if (!navigator.geolocation) {
-      openDirections();
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (result) => openDirections({ lat: result.coords.latitude, lng: result.coords.longitude }),
-      () => openDirections(),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
-    );
+    tab.opener = null;
+    setNavigationMessage('Navegación abierta. La ruta inicia desde tu ubicación actual.');
   }
   async function updateStatus(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -366,11 +351,6 @@ function TripDetail({ id }: { id: string }) {
                       ? `${trip.cargo.pickupAddress}, ${trip.cargo.originCity}`
                       : `${trip.cargo.deliveryAddress}, ${trip.cargo.destinationCity}`}
                   </p>
-                  <p className="mt-2 font-mono text-xs text-slate-500">
-                    {trip.status === 'PENDING_PICKUP'
-                      ? `${trip.cargo.pickupLat}, ${trip.cargo.pickupLng}`
-                      : `${trip.cargo.deliveryLat}, ${trip.cargo.deliveryLng}`}
-                  </p>
                   <Button className="mt-4 w-full sm:w-auto" onClick={openMapsToNextStop}>
                     <Navigation className="h-4 w-4" />
                     {trip.status === 'PENDING_PICKUP'
@@ -382,14 +362,12 @@ function TripDetail({ id }: { id: string }) {
                       {navigationMessage}
                     </p>
                   )}
-                  <p className="mt-2 text-xs text-slate-500">
-                    Abre Google Maps mediante un enlace. No requiere clave ni integración de API.
-                  </p>
                 </div>
               </div>
             </section>
           )}
-          <section className="trip-surface p-5 sm:p-6" aria-label="Ubicación y conexión">
+          <details className="trip-surface p-5 sm:p-6" aria-label="Ubicación y conexión">
+            <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
             <div className="flex items-start gap-3">
               <span
                 className={`mt-0.5 rounded-xl p-2.5 ${truck?.recent ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}
@@ -417,6 +395,8 @@ function TripDetail({ id }: { id: string }) {
                 </p>
               </div>
             </div>
+            <p className="ml-12 mt-1 text-xs font-medium text-blue-700">Ver opciones de ubicación</p>
+            </summary>
             {allowed && (
               <div className="mt-4 rounded-xl bg-slate-50 p-4">
                 <Button
@@ -442,38 +422,53 @@ function TripDetail({ id }: { id: string }) {
                 conexión y los permisos del transportador.
               </p>
             )}
-          </section>
+          </details>
           {next && (
             <section className="trip-surface border-blue-200 p-5 sm:p-6">
               <div className="mb-4 flex items-start gap-3">
-                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
                 <div>
                   <h2 className="font-bold text-slate-900">
-                    {client ? 'Revisa y confirma tu entrega' : 'La siguiente etapa depende de ti'}
+                    {client
+                      ? '¿Recibiste la mercancía?'
+                      : next.status === 'AT_PICKUP'
+                        ? '¿Llegaste al punto de recogida?'
+                        : next.status === 'IN_TRANSIT'
+                          ? '¿La carga está a bordo?'
+                          : '¿Llegaste al destino?'}
                   </h2>
                   <p className="mt-1 text-sm leading-relaxed text-slate-500">
                     {client
-                      ? 'Verifica que la mercancía llegó correctamente. Al confirmar, el viaje se cierra y el vehículo queda disponible.'
-                      : next.status === 'DELIVERED'
-                        ? 'Registra la entrega cuando hayas llegado y entregado la mercancía. La empresa revisará y confirmará la recepción.'
-                        : 'Actualiza el estado cuando completes esta etapa. La empresa verá el cambio en su seguimiento.'}
+                      ? 'Confirma la recepción para cerrar el viaje.'
+                      : next.status === 'AT_PICKUP'
+                        ? 'Al confirmar, la empresa verá que ya estás en la parada.'
+                        : next.status === 'IN_TRANSIT'
+                          ? 'Confirma cuando la mercancía esté cargada para iniciar el trayecto.'
+                          : 'Registra la entrega para que la empresa confirme la recepción.'}
                   </p>
                 </div>
               </div>
               <form onSubmit={updateStatus}>
-                <label className="field">
-                  Nota de la actualización{' '}
-                  <span className="text-xs font-normal text-slate-400">
-                    Opcional · visible para ambas partes
-                  </span>
-                  <textarea
-                    className="input min-h-20 resize-y"
-                    maxLength={1000}
-                    value={note}
-                    onChange={(event) => setNote(event.target.value)}
-                    placeholder="Información útil sobre la recogida o la entrega…"
-                  />
-                </label>
+                <button
+                  type="button"
+                  className="mb-2 text-sm font-medium text-blue-700 hover:text-blue-900"
+                  aria-expanded={showNote}
+                  onClick={() => setShowNote((visible) => !visible)}
+                >
+                  {showNote ? 'Quitar nota' : 'Agregar nota (opcional)'}
+                </button>
+                {showNote && (
+                  <label className="field">
+                    Nota para la empresa
+                    <textarea
+                      className="input min-h-20 resize-y"
+                      maxLength={1000}
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                      placeholder="Ej. Estoy en la entrada principal"
+                    />
+                  </label>
+                )}
                 {actionError && (
                   <p role="alert" className="mt-3 text-sm text-red-700">
                     {actionError}
@@ -488,7 +483,7 @@ function TripDetail({ id }: { id: string }) {
                   ) : (
                     <CheckCircle2 className="h-4 w-4" />
                   )}
-                  {saving ? 'Guardando actualización…' : next.label}
+                  {saving ? 'Guardando…' : next.label}
                 </Button>
               </form>
             </section>
